@@ -88,7 +88,32 @@
     <scalatest-maven-plugin.version>2.2.0</scalatest-maven-plugin.version>
     <scalastyle-maven-plugin.version>1.0.0</scalastyle-maven-plugin.version>
     <nexus-staging-maven-plugin.version>1.6.13</nexus-staging-maven-plugin.version>
+    <!-- netty version override -->
+    <netty.version>4.1.118.Final</netty.version>
+    <!-- async-http-client version override -->
+    <asynchttpclient.version>3.0.1</asynchttpclient.version>
   </properties>
+
+  <dependencyManagement>
+    <dependencies>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-common</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+      <dependency>
+        <groupId>io.netty</groupId>
+        <artifactId>netty-handler</artifactId>
+        <version>${netty.version}</version>
+      </dependency>
+      <!-- Override async-http-client version from Pulsar shaded client -->
+      <dependency>
+        <groupId>org.asynchttpclient</groupId>
+        <artifactId>async-http-client</artifactId>
+        <version>${asynchttpclient.version}</version>
+      </dependency>
+    </dependencies>
+  </dependencyManagement>
 
   <!-- dependencies for all modules -->
   <dependencies>
