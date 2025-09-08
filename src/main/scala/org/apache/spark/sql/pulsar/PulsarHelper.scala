@@ -552,6 +552,10 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
       ledgers.last.size = stats.currentLedgerSize
       ledgers.last.entries = stats.currentLedgerEntries
     }
+    
+    logDebug(s"maxBytesPerTrigger: $topicPartition found ${ledgers.size} ledgers " +
+      s"from ledgerId $startLedgerId, with read limit $readLimit")
+    
     val partitionIndex = if (topicPartition.contains(PartitionSuffix)) {
       topicPartition.split(PartitionSuffix)(1).toInt
     } else {
@@ -559,9 +563,12 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
     }
     var messageId = startMessageId
     var readLimitLeft = readLimit
+    var totalBytesProcessed = 0L
+    
     ledgers.filter(_.entries != 0).sortBy(_.ledgerId).foreach { ledger =>
       assert(readLimitLeft >= 0)
       if (readLimitLeft == 0) {
+        logDebug(s"maxBytesPerTrigger: $topicPartition hit limit, returning $messageId")
         return messageId
       }
       val avgBytesPerEntries = ledger.size / ledger.entries
@@ -572,11 +579,18 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
       } else {
         ledger.size
       }
+      
+      logDebug(s"maxBytesPerTrigger: $topicPartition " +
+        s"ledger=${ledger.ledgerId} size=${ledger.size}b entries=${ledger.entries} " +
+        s"bytesLeft=${bytesLeftInLedger}b readLimitLeft=${readLimitLeft}b")
+      
       if (readLimitLeft > bytesLeftInLedger) {
         readLimitLeft -= bytesLeftInLedger
+        totalBytesProcessed += bytesLeftInLedger
         messageId = DefaultImplementation
           .getDefaultImplementation
           .newMessageId(ledger.ledgerId, ledger.entries - 1, partitionIndex)
+        logDebug(s"maxBytesPerTrigger: $topicPartition consumed entire ledger, new messageId=$messageId")
       } else {
         val numEntriesToRead = Math.max(1, readLimitLeft / avgBytesPerEntries)
         val lastEntryId = if (ledger.ledgerId != startLedgerId) {
@@ -588,9 +602,15 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
         messageId = DefaultImplementation
           .getDefaultImplementation
           .newMessageId(ledger.ledgerId, lastEntryRead, partitionIndex)
+        totalBytesProcessed += readLimitLeft
+        logDebug(s"maxBytesPerTrigger: $topicPartition partial ledger read entries=$numEntriesToRead " +
+          s"lastEntry=$lastEntryRead messageId=$messageId")
         readLimitLeft = 0
       }
     }
+    
+    logDebug(s"maxBytesPerTrigger: $topicPartition final messageId=$messageId " +
+      s"totalProcessed=${totalBytesProcessed}b limit=${readLimit}b")
     messageId
   }
 }
