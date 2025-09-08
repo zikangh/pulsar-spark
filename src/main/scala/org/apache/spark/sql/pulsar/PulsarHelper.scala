@@ -533,8 +533,16 @@ private[pulsar] case class PulsarHelper(
 class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object])
   extends Logging {
 
-  private lazy val pulsarAdmin =
-    PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
+  private lazy val pulsarAdmin = {
+    try {
+      val admin = PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
+      logInfo(s"Successfully created PulsarAdmin connection")
+      admin
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create PulsarAdmin connection to $adminUrl", e)
+    }
+  }
 
   import scala.collection.JavaConverters._
 
@@ -543,7 +551,17 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
                            readLimit: Long): MessageId = {
     val startLedgerId = getLedgerId(startMessageId)
     val startEntryId = getEntryId(startMessageId)
-    val stats = pulsarAdmin.topics.getInternalStats(topicPartition)
+    val stats = try {
+      val result = pulsarAdmin.topics.getInternalStats(topicPartition)
+      logInfo(s"Successfully retrieved internal stats for $topicPartition:" +
+        s"currentLedgerSize=${result.currentLedgerSize}," +
+        s"currentLedgerEntries=${result.currentLedgerEntries}," +
+        s"ledgersCount=${result.ledgers.size()}")
+      result
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to get internal stats for $topicPartition", e)
+    }
     val ledgers = stats.ledgers.asScala.filter(_.ledgerId >= startLedgerId).sortBy(_.ledgerId)
     // The last ledger of the ledgers list doesn't have .size or .entries
     // properly populated, and the corresponding info is in currentLedgerSize
@@ -579,6 +597,9 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
           .newMessageId(ledger.ledgerId, ledger.entries - 1, partitionIndex)
       } else {
         val numEntriesToRead = Math.max(1, readLimitLeft / avgBytesPerEntries)
+        logDebug(s"numEntriesToRead: $numEntriesToRead," +
+          s"topicPartition: $topicPartition," +
+          s"ledgerId: ${ledger.ledgerId}")
         val lastEntryId = if (ledger.ledgerId != startLedgerId) {
           numEntriesToRead - 1
         } else {
