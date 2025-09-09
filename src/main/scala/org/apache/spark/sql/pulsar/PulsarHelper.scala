@@ -71,8 +71,16 @@ private[pulsar] case class PulsarHelper(
   // will only be called if latestOffset is called and there should
   // be an exception thrown in PulsarProvider if maxBytes is set,
   // and adminUrl is not set
-  private lazy val admissionControlHelper = new
-      PulsarAdmissionControlHelper(adminUrl.get, adminConf)
+  private lazy val admissionControlHelper = {
+    logInfo(s"Creating PulsarAdmissionControlHelper with adminUrl=${adminUrl.get}")
+    try {
+      new PulsarAdmissionControlHelper(adminUrl.get, adminConf)
+    } catch {
+      case e: Exception =>
+        logError(s"Failed to create PulsarAdmissionControlHelper with adminUrl=${adminUrl.get}", e)
+        throw e
+    }
+  }
 
   override def close(): Unit = {
     // do nothing
@@ -233,6 +241,8 @@ private[pulsar] case class PulsarHelper(
 
   def latestOffsets(startingOffset: streaming.Offset,
                     totalReadLimit: Long): SpecificPulsarOffset = {
+    logInfo(s"!-- latestOffsets called with totalReadLimit=${totalReadLimit}b")
+    
     // implement helper inside PulsarHelper in order to use getTopicPartitions
     val topicPartitions = getTopicPartitions
     // add new partitions from PulsarAdmin, set to earliest entry and ledger id based on limit
@@ -533,17 +543,39 @@ private[pulsar] case class PulsarHelper(
 class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object])
   extends Logging {
 
-  private lazy val pulsarAdmin =
-    PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
+  private lazy val pulsarAdmin = {
+    try {
+      val admin = PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
+      logInfo(s"!-- Successfully created PulsarAdmin connection to $adminUrl")
+      admin
+    } catch {
+      case e: Exception =>
+        logError(s"!-- Failed to create PulsarAdmin connection to $adminUrl with config $conf", e)
+        throw e
+    }
+  }
 
   import scala.collection.JavaConverters._
 
   def latestOffsetForTopicPartition(topicPartition: String,
                            startMessageId: MessageId,
                            readLimit: Long): MessageId = {
+    logInfo(s"!-- Starting offset calculation for $topicPartition with " +
+      s"startMessageId=$startMessageId, readLimit=${readLimit}b")
+    
     val startLedgerId = getLedgerId(startMessageId)
     val startEntryId = getEntryId(startMessageId)
-    val stats = pulsarAdmin.topics.getInternalStats(topicPartition)
+    
+    val stats = try {
+      val internalStats = pulsarAdmin.topics.getInternalStats(topicPartition)
+      logInfo(s"!-- Successfully retrieved internal stats for topic $topicPartition")
+      internalStats
+    } catch {
+      case e: Exception =>
+        logError(s"!-- Failed to get internal stats for topic $topicPartition. " +
+          s"This may indicate the topic doesn't exist or admin.url is invalid: $adminUrl", e)
+        throw e
+    }
     val ledgers = stats.ledgers.asScala.filter(_.ledgerId >= startLedgerId).sortBy(_.ledgerId)
     // The last ledger of the ledgers list doesn't have .size or .entries
     // properly populated, and the corresponding info is in currentLedgerSize
@@ -553,8 +585,8 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
       ledgers.last.entries = stats.currentLedgerEntries
     }
     
-    logDebug(s"maxBytesPerTrigger: $topicPartition found ${ledgers.size} ledgers " +
-      s"from ledgerId $startLedgerId, with read limit $readLimit")
+    logInfo(s"!-- $topicPartition found ${ledgers.size} ledgers " +
+      s"from ledgerId $startLedgerId, with read limit ${readLimit}b")
     
     val partitionIndex = if (topicPartition.contains(PartitionSuffix)) {
       topicPartition.split(PartitionSuffix)(1).toInt
@@ -568,7 +600,7 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
     ledgers.filter(_.entries != 0).sortBy(_.ledgerId).foreach { ledger =>
       assert(readLimitLeft >= 0)
       if (readLimitLeft == 0) {
-        logDebug(s"maxBytesPerTrigger: $topicPartition hit limit, returning $messageId")
+        logInfo(s"!-- $topicPartition hit limit, returning $messageId")
         return messageId
       }
       val avgBytesPerEntries = ledger.size / ledger.entries
@@ -580,7 +612,7 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
         ledger.size
       }
       
-      logDebug(s"maxBytesPerTrigger: $topicPartition " +
+      logInfo(s"!-- $topicPartition " +
         s"ledger=${ledger.ledgerId} size=${ledger.size}b entries=${ledger.entries} " +
         s"bytesLeft=${bytesLeftInLedger}b readLimitLeft=${readLimitLeft}b")
       
@@ -590,7 +622,7 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
         messageId = DefaultImplementation
           .getDefaultImplementation
           .newMessageId(ledger.ledgerId, ledger.entries - 1, partitionIndex)
-        logDebug(s"maxBytesPerTrigger: $topicPartition consumed entire ledger, new messageId=$messageId")
+        logInfo(s"!-- $topicPartition consumed entire ledger, new messageId=$messageId")
       } else {
         val numEntriesToRead = Math.max(1, readLimitLeft / avgBytesPerEntries)
         val lastEntryId = if (ledger.ledgerId != startLedgerId) {
@@ -603,13 +635,13 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
           .getDefaultImplementation
           .newMessageId(ledger.ledgerId, lastEntryRead, partitionIndex)
         totalBytesProcessed += readLimitLeft
-        logDebug(s"maxBytesPerTrigger: $topicPartition partial ledger read entries=$numEntriesToRead " +
+        logInfo(s"!-- $topicPartition partial ledger read entries=$numEntriesToRead " +
           s"lastEntry=$lastEntryRead messageId=$messageId")
         readLimitLeft = 0
       }
     }
     
-    logDebug(s"maxBytesPerTrigger: $topicPartition final messageId=$messageId " +
+    logInfo(s"!-- $topicPartition final messageId=$messageId " +
       s"totalProcessed=${totalBytesProcessed}b limit=${readLimit}b")
     messageId
   }
