@@ -77,7 +77,7 @@ private[pulsar] case class PulsarHelper(
       new PulsarAdmissionControlHelper(adminUrl.get, adminConf)
     } catch {
       case e: Exception =>
-        logError(s"Failed to create PulsarAdmissionControlHelper with adminUrl=${adminUrl.get}", e)
+        logError(s"!-- Failed to create PulsarAdmissionControlHelper with adminUrl=${adminUrl.get}", e)
         throw e
     }
   }
@@ -544,10 +544,9 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
   extends Logging {
 
   private lazy val pulsarAdmin = {
+    logInfo(s"!-- Creating PulsarAdmin connection to $adminUrl")
     try {
-      val admin = PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
-      logInfo(s"!-- Successfully created PulsarAdmin connection to $adminUrl")
-      admin
+      PulsarAdmin.builder().serviceHttpUrl(adminUrl).loadConf(conf).build()
     } catch {
       case e: Exception =>
         logError(s"!-- Failed to create PulsarAdmin connection to $adminUrl with config $conf", e)
