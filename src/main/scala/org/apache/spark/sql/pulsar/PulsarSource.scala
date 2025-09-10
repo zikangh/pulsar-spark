@@ -90,6 +90,7 @@ private[pulsar] class PulsarSource(
     initialTopicOffsets
     readLimit match {
       case ReadMaxBytes(maxBytes) =>
+        logInfo(s"!-- Applying maxBytesPerTrigger limit of ${maxBytes}b")
         startingOffset match {
           // deals with the case where we add a topic-partition after
           // the stream has started, since adding a new topic-partition
@@ -101,11 +102,16 @@ private[pulsar] class PulsarSource(
     }
   }
   override def getDefaultReadLimit: ReadLimit = {
-    if (maxBytesPerTrigger == 0L) {
+    val readLimit = if (maxBytesPerTrigger == 0L) {
+      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is 0, " +
+        s"returning ReadLimit.allAvailable()")
       ReadLimit.allAvailable()
     } else {
+      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is " +
+        s"${maxBytesPerTrigger}b, returning ReadMaxBytes")
       ReadMaxBytes(maxBytesPerTrigger)
     }
+    readLimit
   }
 
   override def getBatch(start: Option[Offset], end: Offset): DataFrame = {
