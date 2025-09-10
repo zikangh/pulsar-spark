@@ -242,7 +242,7 @@ private[pulsar] case class PulsarHelper(
   def latestOffsets(startingOffset: streaming.Offset,
                     totalReadLimit: Long): SpecificPulsarOffset = {
     logInfo(s"!-- latestOffsets called with totalReadLimit=${totalReadLimit}b")
-    
+
     // implement helper inside PulsarHelper in order to use getTopicPartitions
     val topicPartitions = getTopicPartitions
     // add new partitions from PulsarAdmin, set to earliest entry and ledger id based on limit
@@ -561,10 +561,10 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
                            readLimit: Long): MessageId = {
     logInfo(s"!-- Starting offset calculation for $topicPartition with " +
       s"startMessageId=$startMessageId, readLimit=${readLimit}b")
-    
+
     val startLedgerId = getLedgerId(startMessageId)
     val startEntryId = getEntryId(startMessageId)
-    
+
     val stats = try {
       val internalStats = pulsarAdmin.topics.getInternalStats(topicPartition)
       logInfo(s"!-- Successfully retrieved internal stats for topic $topicPartition")
@@ -583,10 +583,10 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
       ledgers.last.size = stats.currentLedgerSize
       ledgers.last.entries = stats.currentLedgerEntries
     }
-    
+
     logInfo(s"!-- $topicPartition found ${ledgers.size} ledgers " +
       s"from ledgerId $startLedgerId, with read limit ${readLimit}b")
-    
+
     val partitionIndex = if (topicPartition.contains(PartitionSuffix)) {
       topicPartition.split(PartitionSuffix)(1).toInt
     } else {
@@ -595,7 +595,7 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
     var messageId = startMessageId
     var readLimitLeft = readLimit
     var totalBytesProcessed = 0L
-    
+
     ledgers.filter(_.entries != 0).sortBy(_.ledgerId).foreach { ledger =>
       assert(readLimitLeft >= 0)
       if (readLimitLeft == 0) {
@@ -610,11 +610,11 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
       } else {
         ledger.size
       }
-      
+
       logInfo(s"!-- $topicPartition " +
         s"ledger=${ledger.ledgerId} size=${ledger.size}b entries=${ledger.entries} " +
         s"bytesLeft=${bytesLeftInLedger}b readLimitLeft=${readLimitLeft}b")
-      
+
       if (readLimitLeft > bytesLeftInLedger) {
         readLimitLeft -= bytesLeftInLedger
         totalBytesProcessed += bytesLeftInLedger
@@ -639,7 +639,7 @@ class PulsarAdmissionControlHelper(adminUrl: String, conf: ju.Map[String, Object
         readLimitLeft = 0
       }
     }
-    
+
     logInfo(s"!-- $topicPartition final messageId=$messageId " +
       s"totalProcessed=${totalBytesProcessed}b limit=${readLimit}b")
     messageId

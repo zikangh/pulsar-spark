@@ -116,7 +116,7 @@ private[pulsar] class PulsarProvider
 
     val maxBytes = maxBytesPerTrigger(caseInsensitiveParams)
     logInfo(s"!-- createSource: maxBytesPerTrigger = ${maxBytes}b, adminUrl = $adminUrl")
-    
+
     if (adminUrl.isEmpty && maxBytes != 0L) {
       throw new IllegalArgumentException("admin.url " +
         "must be specified if maxBytesPerTrigger is specified")

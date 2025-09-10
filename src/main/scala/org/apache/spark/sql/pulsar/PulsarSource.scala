@@ -103,10 +103,12 @@ private[pulsar] class PulsarSource(
   }
   override def getDefaultReadLimit: ReadLimit = {
     val readLimit = if (maxBytesPerTrigger == 0L) {
-      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is 0, returning ReadLimit.allAvailable()")
+      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is 0, " +
+        s"returning ReadLimit.allAvailable()")
       ReadLimit.allAvailable()
     } else {
-      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is ${maxBytesPerTrigger}b, returning ReadMaxBytes")
+      logInfo(s"!-- getDefaultReadLimit: maxBytesPerTrigger is " +
+        s"${maxBytesPerTrigger}b, returning ReadMaxBytes")
       ReadMaxBytes(maxBytesPerTrigger)
     }
     readLimit
