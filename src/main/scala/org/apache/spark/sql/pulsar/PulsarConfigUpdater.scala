@@ -28,6 +28,8 @@ private[pulsar] case class PulsarConfigUpdater(
     blacklistedKeys: Set[String] = Set(),
     keysToHideInLog: Set[String] = Set(PulsarOptions.AuthParams))
     extends Logging {
+  // Safety check to ensure AuthParams is always included in keysToHideInLog
+  private val safeKeysToHideInLog = keysToHideInLog + PulsarOptions.AuthParams
 
   private val map = new ju.HashMap[String, Object](pulsarParams.asJava)
 
@@ -80,7 +82,7 @@ private[pulsar] case class PulsarConfigUpdater(
 
   private def printConfigValue(key: String, maybeVal: Option[Object]): String = {
     val value = maybeVal.map(_.toString).getOrElse("")
-    if (keysToHideInLog.contains(key)) {
+    if (safeKeysToHideInLog.contains(key)) {
       return CompletelyHiddenMessage
     }
 
